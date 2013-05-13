@@ -41,6 +41,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 
 import com.google.common.collect.*;
+import com.salesforce.phoenix.execute.MutationValue;
 import com.salesforce.phoenix.query.QueryConstants;
 import com.salesforce.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import com.salesforce.phoenix.schema.stat.PTableStats;
@@ -317,6 +318,7 @@ public class PTableImpl implements PTable {
         private Put setValues;
         private Delete unsetValues;
         private Delete deleteRow;
+        private Increment incValues;
         private final long ts;
 
         public PRowImpl(ImmutableBytesWritable key, long ts, Integer bucketNum) {
@@ -328,6 +330,7 @@ public class PTableImpl implements PTable {
             }
             this.setValues = new Put(this.key);
             this.unsetValues = new Delete(this.key);
+            this.incValues = new Increment(this.key);
         }
 
         @Override
@@ -349,6 +352,10 @@ public class PTableImpl implements PTable {
             return mutations;
         }
 
+        public Increment toIncrement() {
+            return incValues;
+        }
+
         private void removeIfPresent(Mutation m, byte[] family, byte[] qualifier) {
             Map<byte[],List<KeyValue>> familyMap = m.getFamilyMap();
             List<KeyValue> kvs = familyMap.get(family);
@@ -366,17 +373,17 @@ public class PTableImpl implements PTable {
         @Override
         public void setValue(PColumn column, Object value) {
             byte[] byteValue = value == null ? ByteUtil.EMPTY_BYTE_ARRAY : column.getDataType().toBytes(value);
-            setValue(column, byteValue);
+            setValue(column, new MutationValue(byteValue));
         }
 
         @Override
-        public void setValue(PColumn column, byte[] byteValue) {
+        public void setValue(PColumn column, MutationValue byteValue) {
             deleteRow = null;
             byte[] family = column.getFamilyName().getBytes();
             byte[] qualifier = column.getName().getBytes();
             PDataType type = column.getDataType();
             // Check null, since some types have no byte representation for null
-            if (byteValue == null || byteValue.length == 0) {
+            if (byteValue == null || byteValue.isEmpty()) {
                 if (!column.isNullable()) { 
                     throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not be null");
                 }
@@ -384,15 +391,21 @@ public class PTableImpl implements PTable {
                 unsetValues.deleteColumns(family, qualifier, ts);
             } else {
                 Integer byteSize = column.getByteSize();
-                if (type.isFixedWidth()) { // TODO: handle multi-byte characters
-                    if (byteValue.length != byteSize) {
-                        throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " must be " + byteSize + " bytes (" + type.toObject(byteValue) + ")");
+                if (byteValue.hasPutValue()) {
+                    byte[] setValue = byteValue.getPutValue();
+                    if (type.isFixedWidth()) { // TODO: handle multi-byte characters
+                        if (setValue.length != byteSize) {
+                            throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " must be " + byteSize + " bytes (" + type.toObject(setValue) + ")");
+                        }
+                    } else if (byteSize != null && setValue.length > byteSize) {
+                        throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not exceed " + byteSize + " bytes (" + type.toObject(setValue) + ")");
                     }
-                } else if (byteSize != null && byteValue.length > byteSize) {
-                    throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not exceed " + byteSize + " bytes (" + type.toObject(byteValue) + ")");
+                    removeIfPresent(unsetValues, family, qualifier);
+                    setValues.add(family, qualifier, ts, setValue);
                 }
-                removeIfPresent(unsetValues, family, qualifier);
-                setValues.add(family, qualifier, ts, byteValue);
+                if (byteValue.hasIncValue()) {
+                    incValues.addColumn(family, qualifier, byteValue.getIncValue());
+                }
             }
         }
 
@@ -400,6 +413,7 @@ public class PTableImpl implements PTable {
         public void delete() {
             setValues = new Put(key);
             unsetValues = new Delete(key);
+            incValues = new Increment(key);
             @SuppressWarnings("deprecation") // FIXME: Remove when unintentionally deprecated method is fixed (HBASE-7870).
             // FIXME: the version of the Delete constructor without the lock args was introduced
             // in 0.94.4, thus if we try to use it here we can no longer use the 0.94.2 version

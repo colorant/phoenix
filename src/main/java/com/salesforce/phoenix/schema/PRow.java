@@ -31,6 +31,8 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.client.Mutation;
 
+import com.salesforce.phoenix.execute.MutationValue;
+
 /**
  * 
  * Provide a client API for updating rows. The updates are processed in
@@ -68,7 +70,7 @@ public interface PRow {
      * @throws ConstraintViolationException if row data violates schema
      * constraint
      */
-    public void setValue(PColumn col, byte[] value);
+    public void setValue(PColumn col, MutationValue value);
     
     /**
      * Delete the row. Note that a delete take precedence over any
