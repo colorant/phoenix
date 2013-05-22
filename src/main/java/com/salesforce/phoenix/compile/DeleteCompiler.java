@@ -88,7 +88,7 @@ public class DeleteCompiler {
 
                 @Override
                 public MutationState execute() {
-                    Map<ImmutableBytesPtr,Map<PColumn,byte[]>> mutation = Maps.newHashMapWithExpectedSize(1);
+                    Map<ImmutableBytesPtr,Map<PColumn,MutationValue>> mutation = Maps.newHashMapWithExpectedSize(1);
                     mutation.put(key, null);
                     return new MutationState(tableRef, mutation, 0, maxSize, connection);
                 }
@@ -177,7 +177,7 @@ public class DeleteCompiler {
                     Scanner scanner = plan.getScanner();
                     ResultIterator iterator = scanner.iterator();
                     int estSize = scanner.getEstimatedSize();
-                    Map<ImmutableBytesPtr,Map<PColumn,byte[]>> mutations = Maps.newHashMapWithExpectedSize(estSize);
+                    Map<ImmutableBytesPtr,Map<PColumn,MutationValue>> mutations = Maps.newHashMapWithExpectedSize(estSize);
                     try {
                         Tuple row;
                         int rowCount = 0;

@@ -190,8 +190,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, com.salesforce
     }
     
     private class ExecutableUpsertStatement extends UpsertStatement implements MutatableStatement {
-        private ExecutableUpsertStatement(TableName table, List<ParseNode> columns, List<ParseNode> values, SelectStatement select, int bindCount) {
-            super(table, columns, values, select, bindCount);
+        private ExecutableUpsertStatement(TableName table, List<ParseNode> columns, boolean isIncrease, List<ParseNode> values, SelectStatement select, int bindCount) {
+            super(table, columns, isIncrease, values, select, bindCount);
         }
 
         @Override
@@ -596,8 +596,8 @@ public class PhoenixStatement implements Statement, SQLCloseable, com.salesforce
         }
         
         @Override
-        public ExecutableUpsertStatement upsert(TableName table, List<ParseNode> columns, List<ParseNode> values, SelectStatement select, int bindCount) {
-            return new ExecutableUpsertStatement(table, columns, values, select, bindCount);
+        public ExecutableUpsertStatement upsert(TableName table, List<ParseNode> columns, boolean isIncrease, List<ParseNode> values, SelectStatement select, int bindCount) {
+            return new ExecutableUpsertStatement(table, columns, isIncrease, values, select, bindCount);
         }
         
         @Override

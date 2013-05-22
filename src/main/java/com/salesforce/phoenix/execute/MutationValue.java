@@ -25,54 +25,77 @@
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ******************************************************************************/
-package com.salesforce.phoenix.parse;
+package com.salesforce.phoenix.execute;
 
-import java.util.*;
+/**
+ * Store values for column Mutation.
+ * there are two type of values could be saved in a single MutationValue instance.
+ * putValue for put mutaion, and incValue for a HTable.increment.
+ * Upon mutation, putValue should be applied before incValue.
+ * 
+ * @author Raymond
+ */
 
-import com.google.common.collect.ImmutableList;
+public class MutationValue {
+    private byte[] putValue = null;
+    private long incValue = 0;
 
-public class UpsertStatement extends MutationStatement {
-    private final List<ParseNode> columns;
-    private final boolean isIncrease;
-    private final List<ParseNode> values;
-    private final SelectStatement select;
-    private final List<ColumnDef> dynColumns;
+    public MutationValue() {
+        this.putValue = null;
+        this.incValue = 0;
+    }
 
-    public UpsertStatement(TableName table, List<ParseNode> columns, boolean isIncrease, List<ParseNode> values, SelectStatement select, int bindCount) {
-        super(table, bindCount);
-        this.columns = columns == null ? Collections.<ParseNode>emptyList() : columns;
-        this.isIncrease = isIncrease;
-        this.values = values;
-        this.select = select;
-        List<ColumnDef> dynamicColumns = new ArrayList<ColumnDef>();
-        for(ParseNode pn:this.columns){
-          if(pn instanceof DynamicColumnParseNode){
-            dynamicColumns.add(((DynamicColumnParseNode)pn).getColumnDef());
-          }
+    public MutationValue(byte[] putValue) {
+        this.putValue = putValue;
+        this.incValue = 0;
+    }
+
+    public MutationValue(byte[] putValue, long incValue) {
+        this.putValue = putValue;
+        this.incValue = incValue;
+    }
+
+    public byte[] getPutValue() {
+        return putValue;
+    }
+
+    public long getIncValue() {
+        return incValue;
+    }
+
+    public void setPutValue(byte[] value) {
+        putValue = value;
+    }
+
+    public void setIncValue(long value) {
+        incValue = value;
+    }
+
+    public boolean hasPutValue() {
+        return !(putValue == null || putValue.length == 0);
+    }
+    
+    public boolean hasIncValue() {
+        return incValue != 0;
+    }
+
+    public boolean isEmpty() {
+        return ((putValue == null || putValue.length == 0) &&
+                (incValue == 0));
+    }
+
+    public void merge(MutationValue m) {
+        
+        if (m == null)
+            return;
+
+        // When merging new MutationValue, new putValue always reset current putValue and incValue at the same time.
+        // While if only incValue is available in new MutaionValue, then it should accumulate with current one.
+        if (m.hasPutValue()) {
+            putValue = m.getPutValue();
+            incValue = 0;
         }
-        this.dynColumns = ImmutableList.copyOf(dynamicColumns);
-    }
-
-    public List<ParseNode> getColumns() {
-        return columns;
-    }
-
-    public boolean isIncrease() {
-        return isIncrease;
-    }
-    public List<ParseNode> getValues() {
-        return values;
-    }
-
-    public SelectStatement getSelect() {
-        return select;
-    }
-
-    public List<ColumnDef> getDynColumns() {
-      return dynColumns;
-    }
-
-    public boolean onlyDynamic() {
-      return dynColumns.size()==columns.size();
+        
+        incValue += m.getIncValue();
     }
 }
